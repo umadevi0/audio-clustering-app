@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectrograms</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .back-button {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: #ffffff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+            text-decoration: none;
+            margin: 20px 0;
+        }
+        .back-button:hover {
+            background-color: #0056b3;
+        }
+        .button-container {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="mt-5">Spectrograms</h1>
+    <button class="back-button"onclick="goBack()">Back</button>
+    <div class="list-group mb-3">
+        {% for cluster in spectrograms %}
+        <a href="{{ url_for('cluster', cluster_name=cluster) }}" class="list-group-item list-group-item-action">
+            {{ cluster }}
+        </a>
+        {% endfor %}
+    </div>
+    <script>
+        function goBack() {
+            window.history.back();
+        }
+    </script>
+</div>
+</body>
+</html>

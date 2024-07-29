@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ cluster }} - Spectrograms</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .spectrogram-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        canvas.spectrogram-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: transform 0.3s ease;
+        }
+        img.spectrogram {
+            border: 1px solid #000;
+            max-width: 100%;
+            height: auto;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+        .zoom-buttons {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="mt-5">{{ cluster }} - Spectrograms</h1>
+    <form method="POST" action="{{ url_for('rename_cluster', cluster_name=cluster) }}" class="d-inline">
+        <div class="input-group mt-2">
+            <input type="text" class="form-control" name="new_cluster_name" placeholder="Rename cluster" required>
+            <div class="input-group-append">
+                <button class="btn btn-outline-secondary" type="submit">Rename</button>
+            </div>
+        </div>
+    </form>
+    <br>
+    <div class="card">
+        <div class="card-body">
+            <ul class="list-group">
+                {% for file in files %}
+                <li class="list-group-item spectrogram-container">
+                  <div class="zoom-buttons">
+                      <button class="btn btn-info zoom-in-btn">Zoom In</button>
+                      <button class="btn btn-info zoom-out-btn">Zoom Out</button>
+                  </div>
+                  <canvas class="spectrogram-canvas"></canvas>
+                  <img src="{{ url_for('serve_spectrogram', filename=file.replace('.wav', '.png')) }}" class="spectrogram" alt="Spectrogram">
+                  <p class="text-center">{{ file }}</p>
+                  <button class="btn btn-primary mark-sound-btn" style="margin-top: 10px;">Mark Sound</button>
+                  <button class="btn btn-secondary unmark-sound-btn" style="margin-top: 10px;">Unmark Sounds</button>
+                  <button class="btn btn-danger delete-clip-btn" style="margin-top: 10px;" data-cluster="{{ cluster }}" data-filename="{{ file }}">Delete Clip</button>
+                </li>                        
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap and jQuery scripts -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', (event) => {
+    document.querySelectorAll('.spectrogram-container').forEach((container, index) => {
+        const canvas = container.querySelector('.spectrogram-canvas');
+        const ctx = canvas.getContext('2d');
+        const image = container.querySelector('img.spectrogram');
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.style.width = '100%';
+        audio.style.display = 'none';
+        container.appendChild(audio);
+
+        const fullAudio = document.createElement('audio');
+        fullAudio.controls = true;
+        fullAudio.style.width = '100%';
+        container.appendChild(fullAudio);
+
+        const filename = image.src.split('/').pop().replace('.png', '.wav');
+        let boxes = [];
+        let selectedBox = null;
+        const markSoundBtn = container.querySelector('.mark-sound-btn');
+        const unmarkSoundBtn = container.querySelector('.unmark-sound-btn');
+        const deleteClipBtn = container.querySelector('.delete-clip-btn');
+
+        image.onload = function() {
+            canvas.width = image.width;
+            canvas.height = image.height;
+            ctx.drawImage(image, 0, 0);
+        };
+
+        function drawBoxes() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(image, 0, 0);
+            boxes.forEach(box => {
+                ctx.beginPath();
+                ctx.rect(box.startX, box.startY, box.width, box.height);
+                ctx.strokeStyle = 'red';
+                ctx.stroke();
+            });
+        }
+
+        function playSelectedSegment(startTime, endTime, minFreq, maxFreq) {
+            audio.src = `/audio_segment/${filename}?start=${startTime}&end=${endTime}&min_freq=${minFreq}&max_freq=${maxFreq}`;
+            audio.load();
+            audio.play();
+            audio.style.display = 'block';
+            fullAudio.style.display = 'none';
+        }
+
+        function hideAudioControls() {
+            audio.pause();
+            audio.style.display = 'none';
+            fullAudio.style.display = 'block';
+        }
+
+        fetch(`/clips/${filename}`)
+            .then(response => response.blob())
+            .then(blob => {
+                fullAudio.src = URL.createObjectURL(blob);
+                fullAudio.onloadedmetadata = () => {
+                    fullAudio.style.display = 'block';
+                };
+            });
+
+        markSoundBtn.addEventListener('click', () => {
+            if (selectedBox) {
+                const soundName = prompt('Please enter a name for the sound:');
+                if (soundName) {
+                    const formData = new FormData();
+                    formData.append('start', selectedBox.startTime);
+                    formData.append('end', selectedBox.endTime);
+                    formData.append('min_freq', selectedBox.minFreq);
+                    formData.append('max_freq', selectedBox.maxFreq);
+                    formData.append('name', soundName);
+                    formData.append('filename', filename);
+
+                    fetch('/save_marked_sound', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Sound marked successfully!');
+                        } else {
+                            alert('There was an error marking the sound.');
+                        }
+                    });
+                }
+            } else {
+                alert('Please select a sound by drawing a box first.');
+            }
+        });
+
+        unmarkSoundBtn.addEventListener('click', () => {
+            boxes = [];
+            drawBoxes();
+            hideAudioControls();
+        });
+
+        let isDrawing = false;
+        let startX, startY;
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            isDrawing = true;
+
+            function onMouseMove(e) {
+                if (isDrawing) {
+                    const currentX = e.clientX - rect.left;
+                    const currentY = e.clientY - rect.top;
+                    const width = currentX - startX;
+                    const height = currentY - startY;
+                    drawBoxes();
+                    ctx.beginPath();
+                    ctx.rect(startX, startY, width, height);
+                    ctx.strokeStyle = 'red';
+                    ctx.stroke();
+                }
+            }
+
+            function onMouseUp(e) {
+                if (isDrawing) {
+                    const endX = e.clientX - rect.left;
+                    const endY = e.clientY - rect.top;
+                    const width = endX - startX;
+                    const height = endY - startY;
+                    boxes.push({ startX, startY, width, height });
+                    isDrawing = false;
+
+                    const startTime = (startX / canvas.width) * fullAudio.duration;
+                    const endTime = ((startX + width) / canvas.width) * fullAudio.duration;
+
+                    // Convert pixel coordinates to frequencies
+                    const minFreq = librosaScale(canvas.height - (startY + height), canvas.height);
+                    const maxFreq = librosaScale(canvas.height - startY, canvas.height);
+
+                    selectedBox = { startX, startY, width, height, startTime, endTime, minFreq, maxFreq };
+
+                    playSelectedSegment(startTime, endTime, minFreq, maxFreq);
+                    canvas.removeEventListener('mousemove', onMouseMove);
+                    canvas.removeEventListener('mouseup', onMouseUp);
+                }
+            }
+
+            canvas.addEventListener('mousemove', onMouseMove);
+            canvas.addEventListener('mouseup', onMouseUp);
+        });
+
+        deleteClipBtn.addEventListener('click', () => {
+            const cluster = deleteClipBtn.getAttribute('data-cluster');
+            const filename = deleteClipBtn.getAttribute('data-filename');
+            fetch('/delete_clip', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ cluster, filename }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    container.remove();
+                } else {
+                    alert('Error deleting clip: ' + data.error);
+                }
+            });
+        });
+
+        let zoomLevel = 1;
+        const zoomStep = 0.2;
+
+        container.querySelector('.zoom-in-btn').addEventListener('click', () => {
+            zoomLevel += zoomStep;
+            applyZoom();
+        });
+
+        container.querySelector('.zoom-out-btn').addEventListener('click', () => {
+            zoomLevel = Math.max(zoomStep, zoomLevel - zoomStep);
+            applyZoom();
+        });
+
+        function applyZoom() {
+            image.style.transform = `scale(${zoomLevel})`;
+            canvas.style.transform = `scale(${zoomLevel})`;
+        }
+    });
+});
+
+// Function to map pixel Y coordinates to frequency in Hz (log scale)
+function librosaScale(y, height) {
+    const minFreq = 1; // Assuming min frequency displayed on the spectrogram is 20 Hz
+    const maxFreq = 8192; // Assuming max frequency displayed on the spectrogram is 22050 Hz
+    const logMinFreq = Math.log10(minFreq);
+    const logMaxFreq = Math.log10(maxFreq);
+
+    const logFreq = logMinFreq + (1 - (y / height)) * (logMaxFreq - logMinFreq);
+    return Math.pow(10, logFreq);
+}
+
+</script>
+</body>
+</html>

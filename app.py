@@ -42,7 +42,7 @@ os.makedirs(app.config['USER_DATA_FOLDER'], exist_ok=True)
 
 # Google Drive API setup
 SCOPES = ['https://www.googleapis.com/auth/drive']
-SERVICE_ACCOUNT_FILE = 'cred.json'
+SERVICE_ACCOUNT_FILE = 'cred.json' #In this repository cred.json is not included due to large file issue ,users are requested to use their credentials file here for google drive integration using google_drive_api
 credentials = service_account.Credentials.from_service_account_file(
     SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 drive_service = build('drive', 'v3', credentials=credentials)
@@ -123,7 +123,7 @@ def download_file_from_google_drive(file_id, local_path):
         status, done = downloader.next_chunk()
         logging.info(f"Download {int(status.progress() * 100)}%.")
     fh.close()
-
+#function for splitting large audio files into clips each of X second(X=User Input)
 def split_audio(input_file, output_folder, split_duration_ms, use_drive=False, drive_folder_id=None):
     audio = AudioSegment.from_file(input_file)
     total_splits = math.ceil(len(audio) / split_duration_ms)
@@ -530,11 +530,6 @@ def cluster(cluster_name):
     files = os.listdir(clustered_clips_dir)
 
     return render_template('cluster.html', cluster=cluster_name, files=files)
-
-
-
-
-
 
 
 
